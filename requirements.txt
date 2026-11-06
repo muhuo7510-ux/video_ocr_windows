@@ -1,0 +1,12 @@
+# Pin set for Python 3.10-3.12 on Windows (official PyPI only).
+# rapidocr_onnxruntime 1.4.4 depends on opencv-python (not headless) and onnxruntime>=1.7.0.
+# onnxruntime==1.20.1 is a conservative CPU pin: newer builds often fail Windows DLL init
+# (onnxruntime_pybind11_state) when VC++ runtime is old or Anaconda DLLs shadow the load.
+# Do NOT mix opencv-python-headless with opencv-python in the same venv.
+gradio>=4.44.0,<6
+rapidocr_onnxruntime==1.4.4
+onnxruntime==1.20.1
+opencv-python>=4.8.0,<5
+pillow>=10.0.0,<12
+imagehash>=4.3.1,<5
+numpy>=1.24.0,<3

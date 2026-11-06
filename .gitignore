@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.log
+output/
+work/
+temp/
+*.mp4
+*.avi
+*.mkv
+*.mov
+.DS_Store
+Thumbs.db
+diagnose_last.txt
