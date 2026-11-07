@@ -275,9 +275,27 @@ def _ensure_v5_model() -> bool:
     return False
 
 
-def _get_ocr():
-    global _ocr_engine
+_ocr_key = None
+
+
+def gpu_available() -> bool:
+    try:
+        import onnxruntime as ort
+        return "DmlExecutionProvider" in ort.get_available_providers()
+    except Exception:
+        return False
+
+
+def _get_ocr(use_gpu: bool | None = None):
+    global _ocr_engine, _ocr_key
+    if use_gpu is None:
+        use_gpu = bool(_ocr_key) if _ocr_engine is not None else False
+    if _ocr_engine is not None and _ocr_key != (bool(use_gpu) and gpu_available()):
+        _ocr_engine = None
     if _ocr_engine is None:
+        use_gpu = bool(use_gpu) and gpu_available()
+        _ocr_key = use_gpu
+        dml = dict(det_use_dml=True, cls_use_dml=True, rec_use_dml=True) if use_gpu else {}
         try:
             from rapidocr_onnxruntime import RapidOCR
         except Exception as e:
@@ -292,10 +310,10 @@ def _get_ocr():
             ) from e
         try:
             if _ensure_v5_model():
-                _ocr_engine = RapidOCR(rec_model_path=str(V5_REC), rec_keys_path=str(V5_DICT))
+                _ocr_engine = RapidOCR(rec_model_path=str(V5_REC), rec_keys_path=str(V5_DICT), **dml)
             else:
                 print("[提示] 高精度模型不可用，改用默认轻量模型。", flush=True)
-                _ocr_engine = RapidOCR()
+                _ocr_engine = RapidOCR(**dml)
         except Exception as e:
             raise RuntimeError(f"初始化 OCR 引擎失败：{e}") from e
     return _ocr_engine
@@ -553,6 +571,7 @@ def run_ocr(
     out_dir: str,
     progress_callback: ProgressCallback = None,
     fps: float | None = None,
+    use_gpu: bool = False,
 ) -> dict:
     """
     主入口：抽帧 → 去重 → OCR → 合并 → 报告。
@@ -588,7 +607,8 @@ def run_ocr(
 
     # 提前初始化 OCR，避免装错依赖后空跑一整遍
     _progress(progress_callback, 0.36, "加载 OCR 模型（首次会下载）…")
-    _get_ocr()
+    _get_ocr(use_gpu)
+    _progress(progress_callback, 0.34, "识别设备：" + ("GPU (DirectML)" if _ocr_key else "CPU"))
 
     ocr_items: list[tuple[float, list[str], Path]] = []
     total = max(len(frames), 1)

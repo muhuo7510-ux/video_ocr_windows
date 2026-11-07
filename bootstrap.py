@@ -18,12 +18,18 @@ def main():
     except ImportError:
         if run([PY, os.path.join(ROOT, "get-pip.py"), "--no-warn-script-location"]) != 0:
             print("[ERROR] pip install failed (network?)"); return 1
-    h = hashlib.sha256(open(REQ, "rb").read()).hexdigest()
+    h = hashlib.sha256(open(REQ, "rb").read() + b"dml1").hexdigest()
     if not (os.path.exists(MARK) and open(MARK).read().strip() == h):
-        for bad in ("onnxruntime-gpu", "onnxruntime-directml", "opencv-python-headless"):
+        for bad in ("onnxruntime-gpu", "opencv-python-headless"):
             run([PY, "-m", "pip", "uninstall", "-y", bad])
         if run([PY, "-m", "pip", "install", "--no-warn-script-location", "-r", REQ]) != 0:
             print("[ERROR] Installing requirements failed."); return 1
+        if os.name == "nt":
+            # GPU: replace CPU onnxruntime with DirectML build (same module, includes CPU fallback)
+            run([PY, "-m", "pip", "uninstall", "-y", "onnxruntime"])
+            if run([PY, "-m", "pip", "install", "--no-warn-script-location", "--no-deps", "onnxruntime-directml==1.20.1"]) != 0:
+                print("[WARN] DirectML install failed, using CPU onnxruntime.")
+                run([PY, "-m", "pip", "install", "--no-warn-script-location", "--no-deps", "onnxruntime==1.20.1"])
         open(MARK, "w").write(h)
     diag = os.path.join(ROOT, "diagnostic_environment.py")
     if os.path.exists(diag) and run([PY, diag]) != 0:
