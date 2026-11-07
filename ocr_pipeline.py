@@ -340,32 +340,42 @@ def _overlap_ratio(a: str, b: str) -> float:
     return inter / max(min(len(sa), len(sb)), 1)
 
 
+def _norm_line(t: str) -> str:
+    return re.sub(r"[\s\W_]+", "", t).lower()
+
+
 def merge_consecutive(
     items: list[tuple[float, list[str], Path]], overlap_thresh: float = 0.7
 ) -> list[dict]:
-    """合并连续高度重叠文本的帧，按时间组织。"""
+    """按文字行去重：每行只保留第一次出现，后面重复（含 OCR 小误差）跳过。"""
+    import difflib
+
+    seen: list[str] = []
     sections: list[dict] = []
     for ts, lines, path in items:
-        text = "\n".join(lines).strip()
-        if not text:
+        fresh: list[str] = []
+        for ln in lines:
+            n = _norm_line(ln)
+            if len(n) < 2:
+                continue
+            dup = False
+            for old in seen[-300:]:
+                if n == old or (len(n) >= 4 and (n in old)):
+                    dup = True
+                    break
+                if abs(len(n) - len(old)) <= max(3, len(n) // 4) and \
+                        difflib.SequenceMatcher(None, n, old).ratio() >= 0.85:
+                    dup = True
+                    break
+            if not dup:
+                seen.append(n)
+                fresh.append(ln)
+        if not fresh:
+            if sections:
+                sections[-1]["end"] = ts
             continue
-        if sections and _overlap_ratio(sections[-1]["text"], text) >= overlap_thresh:
-            # 保留较长版本；扩展结束时间
-            if len(text) > len(sections[-1]["text"]):
-                sections[-1]["text"] = text
-                sections[-1]["frame"] = path
-            sections[-1]["end"] = ts
-            sections[-1]["count"] += 1
-        else:
-            sections.append(
-                {
-                    "start": ts,
-                    "end": ts,
-                    "text": text,
-                    "frame": path,
-                    "count": 1,
-                }
-            )
+        sections.append({"start": ts, "end": ts, "text": "\n".join(fresh),
+                         "frame": path, "count": 1})
     return sections
 
 
