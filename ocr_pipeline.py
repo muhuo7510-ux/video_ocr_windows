@@ -129,7 +129,14 @@ def _ascii_video_copy(video_path: str, work_dir: Path) -> str:
     return str(dst)
 
 
-def _extract_frames_opencv(video_path: str, frames_dir: Path, duration: float) -> list[tuple[Path, float]]:
+def _auto_fps(duration: float, fps: float | None = None) -> float:
+    """fps>0 用用户设置；否则自动：短视频(<180s) 2 帧/秒，长视频 0.2 帧/秒。"""
+    if fps and fps > 0:
+        return float(fps)
+    return 2.0 if duration < 180 else 0.2
+
+
+def _extract_frames_opencv(video_path: str, frames_dir: Path, duration: float, fps_set: float | None = None) -> list[tuple[Path, float]]:
     """Fallback frame extraction via OpenCV when ffmpeg fails."""
     try:
         import cv2
@@ -141,7 +148,7 @@ def _extract_frames_opencv(video_path: str, frames_dir: Path, duration: float) -
         raise RuntimeError("OpenCV 无法打开该视频文件。")
 
     fps = float(cap.get(cv2.CAP_PROP_FPS) or 0) or 25.0
-    interval = 0.5 if duration < 180 else 5.0
+    interval = 1.0 / _auto_fps(duration, fps_set)
     step = max(int(round(fps * interval)), 1)
     out: list[tuple[Path, float]] = []
     idx = 0
@@ -166,64 +173,31 @@ def _extract_frames_opencv(video_path: str, frames_dir: Path, duration: float) -
     return out
 
 
-def extract_frames(video_path: str, frames_dir: Path, duration: float) -> list[tuple[Path, float]]:
-    """
-    抽帧到 frames_dir。
-    时长 < 180s：约 2 fps；否则约每 5 秒一帧。
-    返回 [(png_path, timestamp_sec), ...]
-    """
+def extract_frames(video_path: str, frames_dir: Path, duration: float, fps_set: float | None = None) -> list[tuple[Path, float]]:
+    """抽帧到 frames_dir。fps_set>0 按设置；否则自动。返回 [(png_path, timestamp_sec), ...]"""
     frames_dir.mkdir(parents=True, exist_ok=True)
     for old in frames_dir.glob("*.png"):
         old.unlink()
 
     safe_video = _ascii_video_copy(video_path, frames_dir.parent)
     ffmpeg_error = None
+    rate = _auto_fps(duration, fps_set)
 
     try:
-        if duration < 180:
-            pattern = str(frames_dir / "frame_%06d.png")
-            cmd = [
-                "ffmpeg",
-                "-hide_banner",
-                "-loglevel",
-                "error",
-                "-y",
-                "-i",
-                safe_video,
-                "-vf",
-                "fps=2",
-                pattern,
-            ]
-            _run_ffmpeg(cmd)
-            files = sorted(frames_dir.glob("frame_*.png"))
-            if not files:
-                raise RuntimeError("抽帧结果为空：视频可能无有效画面，或 ffmpeg 无法解码该文件。")
-            return [(f, i / 2.0) for i, f in enumerate(files)]
-
-        interval_pattern = str(frames_dir / "interval_%06d.png")
-        cmd_int = [
-            "ffmpeg",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-y",
-            "-i",
-            safe_video,
-            "-vf",
-            "fps=0.2",
-            interval_pattern,
-        ]
-        _run_ffmpeg(cmd_int)
-        interval_files = sorted(frames_dir.glob("interval_*.png"))
-        if not interval_files:
+        pattern = str(frames_dir / "frame_%06d.png")
+        cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+               "-i", safe_video, "-vf", f"fps={rate:g}", pattern]
+        _run_ffmpeg(cmd)
+        files = sorted(frames_dir.glob("frame_*.png"))
+        if not files:
             raise RuntimeError("抽帧结果为空：视频可能无有效画面，或 ffmpeg 无法解码该文件。")
-        return [(f, i * 5.0) for i, f in enumerate(interval_files)]
+        return [(f, i / rate) for i, f in enumerate(files)]
     except Exception as e:
         ffmpeg_error = e
         for old in frames_dir.glob("*.png"):
             old.unlink()
         try:
-            return _extract_frames_opencv(safe_video, frames_dir, duration)
+            return _extract_frames_opencv(safe_video, frames_dir, duration, fps_set)
         except Exception as e2:
             raise RuntimeError(
                 "抽帧失败：ffmpeg 与 OpenCV 备用方案都未成功。\n"
@@ -547,6 +521,7 @@ def run_ocr(
     video_path: str,
     out_dir: str,
     progress_callback: ProgressCallback = None,
+    fps: float | None = None,
 ) -> dict:
     """
     主入口：抽帧 → 去重 → OCR → 合并 → 报告。
@@ -569,7 +544,7 @@ def run_ocr(
 
     _progress(progress_callback, 0.1, "提取视频帧…")
     try:
-        frames = extract_frames(video_path, work, duration)
+        frames = extract_frames(video_path, work, duration, fps)
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"抽帧失败，请确认视频可读且已安装 ffmpeg。详情：{e}") from e
 

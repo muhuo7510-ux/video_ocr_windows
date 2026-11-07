@@ -26,7 +26,7 @@ def _zip_keyframes(keyframes_dir: str, zip_path: Path) -> str | None:
     return str(zip_path)
 
 
-def process_video(video_file, progress=gr.Progress(track_tqdm=False)):
+def process_video(video_file, fps_val=0, progress=gr.Progress(track_tqdm=False)):
     if video_file is None:
         return "请先上传视频文件。", "", None, None, None
 
@@ -49,7 +49,7 @@ def process_video(video_file, progress=gr.Progress(track_tqdm=False)):
             pass
 
     try:
-        result = run_ocr(video_path, str(out_dir), progress_callback=cb)
+        result = run_ocr(video_path, str(out_dir), progress_callback=cb, fps=float(fps_val or 0))
     except Exception as e:
         return f"识别失败：{e}", "", None, None, None
 
@@ -81,6 +81,9 @@ with gr.Blocks(title="视频文字识别") as demo:
     with gr.Row():
         video_in = gr.Video(label="上传视频", sources=["upload"])
 
+    fps_in = gr.Number(value=0, minimum=0, maximum=30, step=0.1,
+                       label="每秒拆帧数（0 = 自动：3 分钟内 2 帧/秒，更长 0.2 帧/秒）")
+
     start_btn = gr.Button("开始识别", variant="primary")
 
     status_out = gr.Textbox(label="进度 / 结果", lines=3, interactive=False)
@@ -93,7 +96,7 @@ with gr.Blocks(title="视频文字识别") as demo:
 
     start_btn.click(
         fn=process_video,
-        inputs=[video_in],
+        inputs=[video_in, fps_in],
         outputs=[status_out, md_out, report_file, full_file, kf_zip],
     )
 
