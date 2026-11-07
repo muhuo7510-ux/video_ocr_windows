@@ -1,3 +1,14 @@
+# 视频文字识别（Windows 本地版，内置 Python 3.11）
+
+本版自带官方 Python 3.11.9 嵌入版（`python\` 文件夹），`start.bat` 只调用它，并清掉 Anaconda/系统 Python 的环境变量和 PATH，不会互相冲突。**不需要安装 Python。**
+
+需要：ffmpeg（可选，没有会用 OpenCV 兜底）、[VC++ x64 运行库](https://aka.ms/vs/17/release/vc_redist.x64.exe)。
+
+使用：解压整个压缩包 → 双击 `start.bat`。第一次会联网把依赖装进 `python\Lib\site-packages`（几分钟），之后直接启动，浏览器打开 http://127.0.0.1:7860 。
+
+重装依赖：删除 `python\.deps_installed` 再运行。旧版的 `.venv` 文件夹可以删掉。
+
+---
 # 视频文字识别（Windows 本地版）
 
 在本地电脑上对视频画面做中英文 OCR：上传视频 → 抽帧 → 识别文字 → 去重整理 → 导出 Markdown 报告与关键帧。
