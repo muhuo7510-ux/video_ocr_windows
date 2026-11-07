@@ -601,6 +601,11 @@ def run_ocr(
     sections = merge_consecutive(ocr_items, overlap_thresh=0.7)
     keyframes = select_keyframes(sections, max_n=5)
     report_path = write_report(out, video_path, duration, sections, keyframes)
+    fulltext_path = out / "fulltext.md"
+    fulltext_path.write_text(
+        "# 全文合并\n\n" + "\n".join(s["text"] for s in sections) + "\n",
+        encoding="utf-8",
+    )
 
     # 清理工作帧（保留输出目录中的 keyframes 与 report）
     try:
@@ -617,6 +622,7 @@ def run_ocr(
 
     return {
         "report_path": str(report_path),
+        "fulltext_path": str(fulltext_path),
         "keyframes_dir": str(out / "keyframes"),
         "out_dir": str(out),
         "summary": summary,

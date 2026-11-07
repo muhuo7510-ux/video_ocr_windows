@@ -28,7 +28,7 @@ def _zip_keyframes(keyframes_dir: str, zip_path: Path) -> str | None:
 
 def process_video(video_file, progress=gr.Progress(track_tqdm=False)):
     if video_file is None:
-        return "请先上传视频文件。", "", None, None
+        return "请先上传视频文件。", "", None, None, None
 
     # Gradio 可能返回路径字符串或临时文件对象
     if isinstance(video_file, dict) and "name" in video_file:
@@ -37,7 +37,7 @@ def process_video(video_file, progress=gr.Progress(track_tqdm=False)):
         video_path = str(video_file)
 
     if not Path(video_path).is_file():
-        return f"找不到上传的视频：{video_path}", "", None, None
+        return f"找不到上传的视频：{video_path}", "", None, None, None
 
     out_root = Path(tempfile.mkdtemp(prefix="video_ocr_"))
     out_dir = out_root / "output"
@@ -51,7 +51,7 @@ def process_video(video_file, progress=gr.Progress(track_tqdm=False)):
     try:
         result = run_ocr(video_path, str(out_dir), progress_callback=cb)
     except Exception as e:
-        return f"识别失败：{e}", "", None, None
+        return f"识别失败：{e}", "", None, None, None
 
     report_path = result["report_path"]
     try:
@@ -63,7 +63,7 @@ def process_video(video_file, progress=gr.Progress(track_tqdm=False)):
     zipped = _zip_keyframes(result["keyframes_dir"], zip_path)
 
     status = result["summary"] + f"\n输出目录：{result['out_dir']}"
-    return status, md, report_path, zipped
+    return status, md, report_path, result.get("fulltext_path"), zipped
 
 
 CSS = """
@@ -88,12 +88,13 @@ with gr.Blocks(title="视频文字识别") as demo:
 
     with gr.Row():
         report_file = gr.File(label="下载 report.md")
+        full_file = gr.File(label="下载全文合并 fulltext.md")
         kf_zip = gr.File(label="下载关键帧 ZIP")
 
     start_btn.click(
         fn=process_video,
         inputs=[video_in],
-        outputs=[status_out, md_out, report_file, kf_zip],
+        outputs=[status_out, md_out, report_file, full_file, kf_zip],
     )
 
 if __name__ == "__main__":
