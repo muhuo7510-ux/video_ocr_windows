@@ -248,6 +248,33 @@ def _is_ui_noise(line: str) -> bool:
 _ocr_engine = None
 
 
+MODEL_DIR = Path(__file__).resolve().parent / "models"
+V5_REC = MODEL_DIR / "ch_PP-OCRv5_rec_server_infer.onnx"
+V5_DICT = MODEL_DIR / "ppocrv5_dict.txt"
+V5_URLS = [
+    "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.4.0/onnx/PP-OCRv5/rec/ch_PP-OCRv5_rec_server_infer.onnx",
+]
+
+
+def _ensure_v5_model() -> bool:
+    """确保高精度 PP-OCRv5 识别模型存在（首次自动下载约 81MB）。"""
+    if V5_REC.exists() and V5_REC.stat().st_size > 50_000_000 and V5_DICT.exists():
+        return True
+    import urllib.request
+    MODEL_DIR.mkdir(exist_ok=True)
+    tmp = V5_REC.with_suffix(".part")
+    for url in V5_URLS:
+        try:
+            print("下载高精度识别模型（约 81MB，仅首次）…", flush=True)
+            urllib.request.urlretrieve(url, tmp)
+            if tmp.stat().st_size > 50_000_000:
+                tmp.replace(V5_REC)
+                return V5_DICT.exists()
+        except Exception as e:
+            print(f"模型下载失败：{e}", flush=True)
+    return False
+
+
 def _get_ocr():
     global _ocr_engine
     if _ocr_engine is None:
@@ -264,7 +291,11 @@ def _get_ocr():
                 f" 原始错误：{e}"
             ) from e
         try:
-            _ocr_engine = RapidOCR()
+            if _ensure_v5_model():
+                _ocr_engine = RapidOCR(rec_model_path=str(V5_REC), rec_keys_path=str(V5_DICT))
+            else:
+                print("[提示] 高精度模型不可用，改用默认轻量模型。", flush=True)
+                _ocr_engine = RapidOCR()
         except Exception as e:
             raise RuntimeError(f"初始化 OCR 引擎失败：{e}") from e
     return _ocr_engine

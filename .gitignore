@@ -5,3 +5,5 @@ python/Scripts/
 diagnose_last.txt
 __pycache__/
 .venv/
+models/*.onnx
+models/*.part
